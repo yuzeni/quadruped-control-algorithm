@@ -1,0 +1,4 @@
+-std=c++14
+-Wall
+-Wextra
+-DARDUINO_FREE=1
