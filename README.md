@@ -15,7 +15,7 @@ GrabCad: https://grabcad.com/library/walking-quadruped-robot-diy-1
 ### Without Ardiono IDE
 
 This option is there for testing and debugging purposes.\
-Use any c++ compiler to compile `main.cpp` with the compilation define `ARDUINO_FREE 1`.
+Use any c++ compiler to compile `main.cpp` with the compilation define `ARDUINO_FREE 1`.\
 For example:
 - MSVC: `/D ARDUINO_FREE=1`
 - Clang\GCC: `-DARDUINO_FREE=1`

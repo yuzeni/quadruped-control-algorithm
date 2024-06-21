@@ -2,3 +2,9 @@
 compile_flags.txt
 build.bat
 build/
+env/
+
+# Emacs
+\#*\#
+*~
+.\#*
