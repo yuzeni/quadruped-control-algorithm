@@ -1,1 +1,4 @@
 *.ino
+compile_flags.txt
+build.bat
+build/
