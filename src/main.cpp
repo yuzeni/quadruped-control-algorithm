@@ -57,6 +57,7 @@
   Explanation of the variables down below
 */
 
+#include <cstring>
 #include <vector>
 #include <cstdint>
 #include <cmath>
@@ -68,6 +69,9 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <fstream>
+#include <string>
+#include <sstream>
 
 /* arduino specific functionality */
 
@@ -78,10 +82,14 @@ long map(long x, long in_min, long in_max, long out_min, long out_max)
 }
 
 struct {
-    template<typename T> void print(T arg) { std::cout << arg; }
-    template<typename T> void println(T arg) { std::cout << arg << '\n'; }
-    void println() { std::cout << '\n'; }
-    
+    template<typename T> void print(T arg) { *output << arg; }
+    template<typename T> void println(T arg) { *output << arg << '\n'; }
+    void println() { *output << '\n'; }
+
+    void change_ostream(std::ostream* output) {this->output = output;}
+
+private:
+    std::ostream* output = &std::cout;
 } Serial;
 
 void delay(uint64_t ms)
@@ -647,12 +655,158 @@ void loop()
 }
 
 #if ARDUINO_FREE
-int main() {
 
-    for(int i = 0; i < 1; ++i) {
-	std::cout << "\033[31m" "loop itr: " <<  i << "\033[0m" "\n";
-	loop();
+void zero_Ps3()
+{
+    Ps3.data.analog.stick.lx = 0;
+    Ps3.data.analog.stick.ly = 0;
+    Ps3.data.analog.stick.rx = 0;
+    Ps3.data.analog.stick.ry = 0;
+    Ps3.event.button_up.cross = false;
+    Ps3.event.button_up.circle = false;
+    Ps3.event.button_up.triangle = false;
+    Ps3.event.button_up.square = false;
+    Ps3.event.button_up.down = false;
+    Ps3.event.button_up.right = false;
+    Ps3.event.button_up.up = false;
+    Ps3.event.button_up.left = false;
+}
+
+
+void record_test(std::string (*test)(void), std::string test_record_name)
+{
+    std::ofstream record(test_record_name, std::ios::binary);
+    record << test();
+    std::cout << "recorded test '" << test_record_name << "'\n";
+}
+
+enum test_result_enum {
+    TR_Success,
+    TR_Fail,
+    TR_Problem,
+};
+
+test_result_enum run_test(std::string(*test)(void), std::string test_result_name) {
+
+    // read previous test result:
+    
+    std::ifstream record(test_result_name, std::ios::binary);
+
+    char* record_data = nullptr;
+    if(!record.is_open()) {
+	std::cout << "Couldn't find record of test '" << test_result_name << "'.\n";
+	return TR_Problem;
     }
+    record.seekg(0, record.end);
+    size_t record_size = record.tellg();
+    record.seekg(0, record.beg);
+
+    record_data = new char[record_size + 1];
+    record.read(record_data, record_size);
+
+    if(!record) {
+	std::cout << "Error reading record: " << test_result_name << ".\n";
+	record.close();
+	return TR_Problem;
+    }
+    
+    record_data[record_size] = '\0';
+    record.close();
+	
+    // run the test and compare with record
+
+    std::string result = test();
+    if(std::strcmp(result.c_str(), record_data) == 0) {
+	std::cout << "\033[32m" << "PASS " << test_result_name << "\033[0m" "\n";
+	delete[] record_data;
+	return TR_Success;
+    }
+    else {
+	std::cout << "\033[31m" << "FAIL " << test_result_name << "\033[0m" "\n";
+	delete[] record_data;
+	return TR_Fail;
+    }
+}
+
+std::string test_1()
+{
+    std::stringstream result;
+    Serial.change_ostream(&result);
+    zero_Ps3();
+    int n_itr = 50;
+    for(int i = 0; i < n_itr; ++i) {
+	get_ps3_input();
+	loop();
+	Ps3.data.analog.stick.lx += 128.0 / double(n_itr);
+	Ps3.data.analog.stick.ly += 128.0 / double(n_itr);
+	Ps3.data.analog.stick.rx += 128.0 / double(n_itr);
+	Ps3.data.analog.stick.ry += 128.0 / double(n_itr);
+    }
+    return result.str();
+}
+
+std::string test_walking_forward_backward()
+{
+    std::stringstream result;
+    Serial.change_ostream(&result);
+    zero_Ps3();
+    Ps3.data.analog.stick.ly = -127.0;
+    int n_itr = 50;
+    for(int i = 0; i < n_itr; ++i) {
+	get_ps3_input();
+	loop();
+	Ps3.data.analog.stick.ly += 255.0 / (n_itr - 1);
+    }
+    return result.str();
+}
+
+std::string test_walking_left_right()
+{
+    std::stringstream result;
+    Serial.change_ostream(&result);
+    zero_Ps3();
+    Ps3.data.analog.stick.lx = -127.0;
+    int n_itr = 50;
+    for(int i = 0; i < n_itr; ++i) {
+	get_ps3_input();
+	loop();
+	Ps3.data.analog.stick.lx += 255.0 / (n_itr - 1);
+    }
+    return result.str();
+}
+
+std::string test_turning()
+{
+    std::stringstream result;
+    Serial.change_ostream(&result);
+    zero_Ps3();
+    Ps3.data.analog.stick.rx = -127.0;
+    int n_itr = 50;
+    for(int i = 0; i < n_itr; ++i) {
+	get_ps3_input();
+	loop();
+	Ps3.data.analog.stick.rx += 255.0 / (n_itr - 1);
+    }
+    return result.str();
+}
+
+void record_all_tests() {
+    record_test(test_1, "test_1.txt");
+    record_test(test_walking_forward_backward, "test_walking_forward_backward.txt");
+    record_test(test_walking_left_right, "test_walking_left_right.txt");
+    record_test(test_turning, "test_turning.txt");
+}
+
+void run_all_tests() {
+    run_test(test_1, "test_1.txt");
+    run_test(test_walking_forward_backward, "test_walking_forward_backward.txt");
+    run_test(test_walking_left_right, "test_walking_left_right.txt");
+    run_test(test_turning, "test_turning.txt");
+}
+
+int main() {
+    
+    run_all_tests();
     
 }
 #endif // ARDUINO_FREE
