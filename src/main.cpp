@@ -273,7 +273,7 @@ float get_angle(float x, float y) {
 // these are the angles of the vectors to the leg tips in their "home" position
 
 // in case the IK algorithm cant find a solution, the previous angles will be used
-vector<vector<float>> previous_angles = {
+vec3<float> previous_angles[NUMBER_OF_LEGS] = {
     { 90, 90, 90 },
     { 90, 90, 90 },
     { 90, 90, 90 },
@@ -306,8 +306,8 @@ double sqr(double x) { return(x * x); }
 
 // SIMPLE MOTION ALGORITHM START!
 // angle between two 2d vectors
-double angle_vec2_vec2(vector<double> a, vector<double> b) {
-    return (acos((a[0] * b[0] + a[1] * b[1]) / (sqrt(sqr(a[0]) + sqr(a[1])) * sqrt(sqr(b[0]) + sqr(b[1]))))) * double(qp_RAD_TO_DEG);
+double angle_vec2_vec2(double a_x, double a_y, double b_x, double b_y) {
+    return (acos((a_x * b_x + a_y * b_y) / (sqrt(sqr(a_x) + sqr(a_y)) * sqrt(sqr(b_x) + sqr(b_y))))) * double(qp_RAD_TO_DEG);
 }
 
 // Inverse Kinematics Algorithm, might be buggy
@@ -358,9 +358,9 @@ vec3<float> get_IK(float x, float y, float z, int leg)
     knee_x = fx;
     knee_y = fy;
     // calculating the angles between the computed vectors and the vectors representing the minimal servo position
-    angle_x = float(angle_vec2_vec2({ (leg >= 2 ? 1.0 : -1.0), 0 }, { trans_pos_y, trans_pos_z })); // 0
-    angle_y = float(angle_vec2_vec2({1.0, 1.0}, {knee_x, knee_y})); // 1
-    angle_z = float(angle_vec2_vec2({ knee_x - trans_pos_x, knee_y - trans_pos_z }, { 1,-1 })); // 2
+    angle_x = float(angle_vec2_vec2((leg >= 2 ? 1.0 : -1.0), 0, trans_pos_y, trans_pos_z)); // 0
+    angle_y = float(angle_vec2_vec2(1.0, 1.0, knee_x, knee_y)); // 1
+    angle_z = float(angle_vec2_vec2(knee_x - trans_pos_x, knee_y - trans_pos_z, 1,-1)); // 2
 
     // in case one of the angles is not a number (meaning there isnt a solution) then it returns the previous angles 
     if (angle_x + angle_y + angle_z != angle_x + angle_y + angle_z)
@@ -412,8 +412,7 @@ void update_servos()
 {
     // Subtracting the "actual home leg position" from the global leg positions,
     // in order to move the coordinates from the global to the local coordinate system  
-    vector<vector<float>> new_leg_pos = { {0,0,0},{0,0,0},{0,0,0},{0,0,0} };
-    vec3<float> new_servo_pos;
+    vec3<float> new_leg_pos[NUMBER_OF_LEGS] = { {0,0,0},{0,0,0},{0,0,0},{0,0,0} };
     for(int i = 0; i < 4; i++){
 	for(int j = 0; j < 2; j++)
 	    new_leg_pos[i][j] = glob_leg_pos[i][j] - actual_home_leg_pos[i][j];
@@ -422,6 +421,7 @@ void update_servos()
     }
   
     // Iterating over all servos and moving them to the new position
+    vec3<float> new_servo_pos;
     for(int leg = 0; leg < NUMBER_OF_LEGS; leg++){
 	new_servo_pos = get_IK(new_leg_pos[leg][0], new_leg_pos[leg][1], new_leg_pos[leg][2], leg);
 	for(int servo = 0; servo < SERVOS_PER_LEG; ++servo){
@@ -439,64 +439,35 @@ void update_servos()
 }
 
 // like the map() function, but for float instead of int
-float mapf(float x, float in_min, float in_max, float out_min, float out_max) {
+float mapf(float x, float in_min, float in_max, float out_min, float out_max)
+{
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-// experimental. This will have to be aplied on "new_dir" in get_move_commandf()
-void adapt_motion_params(vector<float> new_dir){
-    float dir_vec_length = sqrt(sqr(new_dir[0]) + sqr(new_dir[1]) + sqr(new_dir[2]));
-    // MOTION_RES should bean integer, therefore map instead of mapf is used
-    MOTION_RES = map(dir_vec_length, 0, MAX_DIR_VEC_LENGTH, MIN_MOTION_RES, MAX_MOTION_RES);
-    if((dir_vec_length) > (MAX_DIR_VEC_LENGTH * WALK_RUN_PIVOT)) {
-	STEP_TIME_REDUCTION = 1;
-	PUSH_HEIGHT = MAX_PUSH_HEIGHT;
-    }
-    else {
-	STEP_TIME_REDUCTION = mapf(dir_vec_length, 0, MAX_DIR_VEC_LENGTH * WALK_RUN_PIVOT, MAX_STEP_TIME_REDUCTION, MIN_STEP_TIME_REDUCTION);
-	PUSH_HEIGHT = 0;
-    }
-}
-
-vec4<float> get_move_commandf(){
+vec4<float> get_move_commandf()
+{
     vec4<float> new_dir = {(float)x_direction, (float)y_direction, (float)z_direction, (float)rotation_direction};
     return(new_dir);
 }
 
-vector<float> vec_float_div(vector<float> a, float b) {
-    vector<float> quo(a.size());
-    for (int i = 0; i < a.size(); i++)
-	quo[i] = (a[i] / b);
-    return(quo);
-}
-
-vector<float> vec_float_mul(vector<float> a, float b) {
-    vector<float> pro(a.size());
-    for (int i = 0; i < a.size(); i++)
-	pro[i] = (a[i] * b);
-    return(pro);
-}
-
-void get_rota_trans(vec4<float>* next_step, vec4<float>& next_dir) {
-    float r;
+static void get_rota_trans(vec4<float>* next_step, vec4<float>& next_dir)
+{
     for (int i = 0; i < 2; ++i) {
-	r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
-	next_step[i][0] = cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] - sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
-	next_step[i][1] = sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] + cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
+	next_step[i].x = cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
+	next_step[i].y = sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
     }
 }
 
-void get_rota_trans(vec3<float>* next_step, vec4<float>& next_dir) {
-    float r;
+static void get_rota_trans(vec3<float> *next_step, vec4<float> &next_dir)
+{
     for (int i = 0; i < 2; ++i) {
-	r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
-	next_step[i][0] = cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] - sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
-	next_step[i][1] = sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] + cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
+	next_step[i].x = cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
+	next_step[i].y = sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
     }
 }
 
-void get_step(vec4<float>* step_pair, vec4<float>* push_pair, vec4<float>& next_dir) {
-    vector<vector<float>> next_step = { {0,0,0,0}, {0,0,0,0} };
+static void get_step(vec4<float> *step_pair, vec4<float> *push_pair, vec4<float> &next_dir)
+{
     if ((signbit(prev_dir[0][0]) + signbit(next_dir[0])) == 1 ||
 	(signbit(prev_dir[0][1]) + signbit(next_dir[1])) == 1 ||
 	(signbit(prev_dir[0][2]) + signbit(next_dir[2])) == 1 ||
@@ -522,19 +493,8 @@ void get_step(vec4<float>* step_pair, vec4<float>* push_pair, vec4<float>& next_
     get_rota_trans(step_pair, next_dir);
 }
 
-vector<float> bez3_at(float* p0, float* p1, float* p2, float at, int dim) {
-    float p01, p12, p01_12;
-    vector<float> bez_result_at;
-    for (int j = 0; j < dim; j++) {
-	p01 = (p0[j] + (p1[j] - p0[j]) * at);
-	p12 = (p1[j] + (p2[j] - p1[j]) * at);
-	p01_12 = (p01 + (p12 - p01) * at);
-	bez_result_at.push_back(p01_12);
-    }
-    return(bez_result_at);
-}
-
-vec3<float> bez3_3d_at(float* p0, float* p1, float* p2, float at) {
+vec3<float> bez3_3d_at(vec3<float> &p0, vec3<float> &p1, vec3<float> &p2, float at)
+{
     float p01, p12, p01_12;
     vec3<float> bez_result_at;
     for (int j = 0; j < 3; j++) {
@@ -546,16 +506,24 @@ vec3<float> bez3_3d_at(float* p0, float* p1, float* p2, float at) {
     return(bez_result_at);
 }
 
-vec3<float> incl_z(vec4<float>& next_leg_pos, vec4<float>& prev_leg_pos, float z_peak, int i) {
-    float p0[3] = { prev_leg_pos[0], prev_leg_pos[1], prev_leg_pos[2] };
-    float p1[3] = { (next_leg_pos[0] + prev_leg_pos[0]) / 2, (next_leg_pos[1] + prev_leg_pos[1]) / 2, ((next_leg_pos[2] + prev_leg_pos[2]) / 2) + ((next_leg_pos[2] + prev_leg_pos[2]) / 2) * float(z_peak) };
-    float p2[3] = { next_leg_pos[0], next_leg_pos[1], next_leg_pos[2] };
+vec3<float> incl_z(vec4<float> &next_leg_pos, vec4<float> &prev_leg_pos, float z_peak, int i)
+{
+    vec3<float> p0 = { prev_leg_pos[0], prev_leg_pos[1], prev_leg_pos[2] };
+    vec3<float> p1 = { (next_leg_pos[0] + prev_leg_pos[0]) / 2, (next_leg_pos[1] + prev_leg_pos[1]) / 2, ((next_leg_pos[2] + prev_leg_pos[2]) / 2) + ((next_leg_pos[2] + prev_leg_pos[2]) / 2) * float(z_peak) };
+    vec3<float> p2 = { next_leg_pos[0], next_leg_pos[1], next_leg_pos[2] };
     return bez3_3d_at(p0, p1, p2, (i >= 0 ? i / MOTION_RES : 0));
 }
 
-void add_globLeg_stepPair(vec4<float> *step_pair, vec4<float> *step_pair_prev_pos, vec4<float>& next_dir, int i) {
+void add_globLeg_stepPair(vec4<float> *step_pair, vec4<float> *step_pair_prev_pos, vec4<float>& next_dir, int i)
+{
     for (int j = 0; j < 2; j++)
-	glob_leg_pos[int(step_pair[j][3])] = incl_z(step_pair[j], step_pair_prev_pos[j], (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0]) + sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1]) + sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2]) + sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3])) >= 4 ? STEP_HEIGHT : 0), i);
+	glob_leg_pos[int(step_pair[j][3])] = incl_z(step_pair[j],
+						    step_pair_prev_pos[j],
+						    (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0])
+							  + sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1])
+							  + sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2])
+							  + sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3]))
+						     >= 4 ? STEP_HEIGHT : 0), i);
 }
 
 void add_globLeg_pushPair(vec4<float> *push_pair, vec4<float> *push_pair_prev_pos, vec4<float> &next_dir, int i)
@@ -567,7 +535,13 @@ void add_globLeg_pushPair(vec4<float> *push_pair, vec4<float> *push_pair_prev_po
 	for(int h = 0; h < 3; h++)
 	    push_pair[j][h] = push_pair_prev_pos[j][h] - next_dir[h];
 	// including the rotational motion
-	glob_leg_pos[int(push_pair[j][3])] = incl_z(push_pair[j], push_pair_prev_pos[j], (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0]) + sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1]) + sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2]) + sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3])) >= 4 ? PUSH_HEIGHT : 0), i);
+	glob_leg_pos[int(push_pair[j][3])] = incl_z(push_pair[j],
+						    push_pair_prev_pos[j],
+						    (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0]) +
+							  sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1]) +
+							  sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2]) +
+							  sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3]))
+						     >= 4 ? PUSH_HEIGHT : 0), i);
 	next_dir_portions_x_i = next_dir_portions * -i; // we need a minus, since the pushing pair has to go in the reversed direction of the global direction
     }
     vec3<float> next_step[2] = { glob_leg_pos[int(push_pair[0][3])], glob_leg_pos[int(push_pair[1][3])] };
@@ -577,7 +551,8 @@ void add_globLeg_pushPair(vec4<float> *push_pair, vec4<float> *push_pair_prev_po
 	    glob_leg_pos[int(push_pair[j][3])][h] = next_step[j][h];
 }
 
-void simple_motion_func() {
+void simple_motion_func()
+{
     PUSH_HEIGHT = new_PUSH_HEIGHT;
     STEP_HEIGHT = new_STEP_HEIGHT;
     MOTION_RES = new_MOTION_RES;
@@ -630,7 +605,8 @@ void simple_motion_func() {
 // 4) If everything is wired properly plug in the power. The servos should now jump to a specified position.
 // 5) Put on the carbon fiber parts with the already attached servo discs, so that: upper leg => horizontal (pointing backwards) | servo horn (not lower leg) => vertical (pointing up) | hip assembly => horizontal (pointing right/left)
 //    (if unclear email me, and I will send you a picture)
-void tune_servo_positions(){
+void tune_servo_positions()
+{
     // leg0
     pca9685.setPWM(SERVO_CONNECTIONS[3], 0, map(servo_mask(90, 3), 0, 180, SERVOMIN, SERVOMAX));
     pca9685.setPWM(SERVO_CONNECTIONS[4], 0, map(servo_mask(135, 4), 0, 180, SERVOMIN, SERVOMAX));
@@ -650,7 +626,8 @@ void tune_servo_positions(){
 }
 
 // reads the ps3 controller input
-void get_ps3_input(){
+void get_ps3_input()
+{
     x_direction = mapf(Ps3.data.analog.stick.ly, -127, 128, -MAX_X_DIR, MAX_X_DIR);
     float MAXy = sqrt(sqr(MAX_DIR_VEC_LENGTH) - sqr(x_direction));
     MAXy = MAXy >= MAX_Y_DIR ? MAX_Y_DIR : MAXy;
