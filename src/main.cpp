@@ -137,23 +137,17 @@ struct {
 
 using namespace std;
 
-// SERVO CONSTANTS
+// SERVO PARAMS
 
-// Define maximum and minimum number of "ticks" for the servo motors
-// Range from 0 to 4095
-// This determines the pulse width
-#define SERVOMIN  100// experimenting reqiered.
-#define SERVOMAX  550
+// Define maximum and minimum number of "ticks" for the servo motors.          /* ! experimenting reqiered ! */
+// Range from 0 to 4095. This determines the pulse width.
+constexpr uint32_t SERVOMIN = 100;
+constexpr uint32_t SERVOMAX = 550;
  
-// Define servo motor connections
+// Servo motor indices -> translation from the Servo Driver to the internal ordering.
 const int SERVO_CONNECTIONS[12] = {11, 10, 9, 15, 14, 13, 4, 5, 6, 0, 1, 2};
 
 // SIMPLE MOTION ALORITHM CONSTANTS START
-
-#define INF 99999999999
-
-// you might not need this threshold, experimenting required
-#define CONTROLLER_DRIFT_THRESHOLD 4
 
 #define NUMBER_OF_LEGS 4
 #define SERVOS_PER_LEG 3
@@ -162,14 +156,13 @@ const int SERVO_CONNECTIONS[12] = {11, 10, 9, 15, 14, 13, 4, 5, 6, 0, 1, 2};
 // between the left and right legs. Increasing X SIZE will increase the distance between the front and rear legs.
 // ACTUAL_QP_SIZE is needed for the computation, and should represent the exact distances
 // between the hip joints (Y) and the pivots of the upper legs (X)
-#define QP_SIZEX 210
-#define ACTUAL_QP_SIZEX 218
-#define QP_SIZEY 210
-#define ACTUAL_QP_SIZEY 110
+constexpr float QP_SIZEX = 210;
+constexpr float ACTUAL_QP_SIZEX = 218;
+constexpr float QP_SIZEY = 210;
+constexpr float ACTUAL_QP_SIZEY = 110;
 
-
-#define UPLEGLGTH 130  // UPLEGLGTH is the length of the upper leg in mm
-#define LOWLEGLGTH 130 // LOWLEGLGTH is the length of the lower leg in mm
+constexpr float UPLEGLGTH = 130;  // UPLEGLGTH is the length of the upper leg in mm
+constexpr float LOWLEGLGTH = 130; // LOWLEGLGTH is the length of the lower leg in mm
 
 #define LEG_OFFSET_Y 32.4  // This is the Y distance between the hip joint and the leg tip
 #define LOWLEG_CURVATURE 7 // Takes the curvature of the lower leg into account, in degrees
@@ -197,8 +190,34 @@ const int SERVO_CONNECTIONS[12] = {11, 10, 9, 15, 14, 13, 4, 5, 6, 0, 1, 2};
 
 constexpr double EPSILON = 0.000000001;
 constexpr double qp_PI = 3.14159265359;
-constexpr double qp_RAD_TO_DEG =  180.0 / qp_PI;
-constexpr double qp_DEG_TO_RAD =  qp_PI / 180.0;
+constexpr double qp_RAD_TO_DEG = 180.0 / qp_PI;
+constexpr double qp_DEG_TO_RAD = qp_PI / 180.0;
+
+#define IDX_2D(x, y, nx) ((x) + (y) * (nx))
+
+template<typename T> struct vec2 {
+    T x, y;
+    T& operator[](size_t idx){return *(&x + idx);}
+    const T& operator[](size_t idx) const {return *(&x + idx);}
+    vec2<T> operator/(T s) const { return {x/s, y/s}; }
+    vec2<T> operator*(T s) const { return {x*s, y*s}; }
+};
+
+template<typename T> struct vec3 {
+    T x, y, z;
+    T& operator[](size_t idx){return *(&x + idx);}
+    const T& operator[](size_t idx) const {return *(&x + idx);}
+    vec3<T> operator/(T s) const { return {x/s, y/s, z/s}; }
+    vec3<T> operator*(T s) const { return {x*s, y*s, z*s}; }
+};
+
+template<typename T> struct vec4 {
+    T x, y, z, a;
+    T& operator[](size_t idx){return *(&x + idx);}
+    const T& operator[](size_t idx) const { return *(&x + idx); }
+    vec4<T> operator/(T s) const { return {x/s, y/s, z/s, a/s}; }
+    vec4<T> operator*(T s) const { return {x*s, y*s, z*s, a*s}; }
+};
 
 // SIMPLE MOTION ALORITHM CONSTANTS END
 
@@ -222,33 +241,36 @@ float STEP_TIME_REDUCTION = 1.5; // positive integer >= 1
 // The implementation of smoothe accelleration is based on delay(), so I recommend to leave this at 0.
 float STEP_ACCELERATION_WEIGHT = 0;
 
+
 // These are the Positions of the leg tips in their "home" position in realtion to the global coordinate system
-vector<vector<float>> home_leg_pos = {
-    { float(QP_SIZEX / 2 + COG_X_OFFSET), float(-ACTUAL_QP_SIZEY / 2 + COG_Y_OFFSET), float(HOME_HEIGHT) },
-    { float(-QP_SIZEX / 2 + COG_X_OFFSET), float(-ACTUAL_QP_SIZEY / 2 + COG_Y_OFFSET), float(HOME_HEIGHT) },
-    { float(QP_SIZEX / 2 + COG_X_OFFSET), float(ACTUAL_QP_SIZEY / 2 + COG_Y_OFFSET), float(HOME_HEIGHT) },
-    { float(-QP_SIZEX / 2 + COG_X_OFFSET), float(ACTUAL_QP_SIZEY / 2 + COG_Y_OFFSET), float(HOME_HEIGHT) },
+vec3<float> home_leg_pos[NUMBER_OF_LEGS] = {
+    {QP_SIZEX / 2.0 + COG_X_OFFSET,  -ACTUAL_QP_SIZEY / 2.0 + COG_Y_OFFSET, HOME_HEIGHT},
+    {-QP_SIZEX / 2.0 + COG_X_OFFSET, -ACTUAL_QP_SIZEY / 2.0 + COG_Y_OFFSET, HOME_HEIGHT},
+    {QP_SIZEX / 2.0 + COG_X_OFFSET,  ACTUAL_QP_SIZEY / 2.0 + COG_Y_OFFSET,  HOME_HEIGHT},
+    {-QP_SIZEX / 2.0 + COG_X_OFFSET, ACTUAL_QP_SIZEY / 2.0 + COG_Y_OFFSET,  HOME_HEIGHT}
 };
+
 // Also needed for the "Actual" quadruped size.
-const vector<vector<float>> actual_home_leg_pos = {
-    { float(ACTUAL_QP_SIZEX / 2), float(-QP_SIZEY / 2), float(HOME_HEIGHT) },
-    { float(-ACTUAL_QP_SIZEX / 2), float(-QP_SIZEY / 2), float(HOME_HEIGHT) },
-    { float(ACTUAL_QP_SIZEX / 2), float(QP_SIZEY / 2), float(HOME_HEIGHT) },
-    { float(-ACTUAL_QP_SIZEX / 2), float(QP_SIZEY / 2), float(HOME_HEIGHT) },
+const vec3<float> actual_home_leg_pos[NUMBER_OF_LEGS] = {
+    {ACTUAL_QP_SIZEX / 2.0,  -QP_SIZEY / 2.0, HOME_HEIGHT},
+    {-ACTUAL_QP_SIZEX / 2.0, -QP_SIZEY / 2.0, HOME_HEIGHT},
+    {ACTUAL_QP_SIZEX / 2.0,  QP_SIZEY / 2.0,  HOME_HEIGHT},
+    {-ACTUAL_QP_SIZEX / 2.0, QP_SIZEY / 2.0,  HOME_HEIGHT}
 };
 
 // This is where the current leg position is stored. (very important variable)
-vector<vector<float>> glob_leg_pos = home_leg_pos;
+vec3<float> glob_leg_pos[NUMBER_OF_LEGS] = {
+    home_leg_pos[0],
+    home_leg_pos[1],
+    home_leg_pos[2],
+    home_leg_pos[3]
+};
 
-float get_angle(float x, float y);
+float get_angle(float x, float y) {
+    return std::atan2(y, x) * qp_RAD_TO_DEG + ((y <= 0) * 360);
+}
 
 // these are the angles of the vectors to the leg tips in their "home" position
-vector<float> home_leg_angle = {
-    get_angle(home_leg_pos[0][0], home_leg_pos[0][1]),
-    get_angle(home_leg_pos[1][0], home_leg_pos[1][1]),
-    get_angle(home_leg_pos[2][0], home_leg_pos[2][1]),
-    get_angle(home_leg_pos[3][0], home_leg_pos[3][1]),
-};
 
 // in case the IK algorithm cant find a solution, the previous angles will be used
 vector<vector<float>> previous_angles = {
@@ -262,7 +284,7 @@ vector<vector<float>> previous_angles = {
 int prev_step_pair = int(!START_PAIR);
 
 // Here the two last directions (global direction of the quadruped) are saved
-vector<vector<float>> prev_dir{ { 0,0,0,0 }, {0,0,0,0} };
+vec4<float> prev_dir[2] = { { 0,0,0,0 }, {0,0,0,0} };
 
 // for the servo communication
 //double pwm0, pwm1, pwm2, pwm3, pwm4, pwm5, pwm6, pwm7, pwm8, pwm9, pwm10, pwm11;
@@ -291,38 +313,35 @@ double angle_vec2_vec2(vector<double> a, vector<double> b) {
 // Inverse Kinematics Algorithm, might be buggy
 // pos = (x,y,z) in regards to the local coordinate system of the leg
 // leg = id of the leg
-vector<float> get_IK(vector<float> pos, int leg)
+vec3<float> get_IK(float x, float y, float z, int leg)
 {
-    pos[0] = float(pos[0]);
-    pos[1] = float(pos[1]);
-    pos[2] = float(pos[2]);
-    vector<double> knee(2);
-    vector<float> angles;
-    vector<double> trans_pos(3);
-    double l1 = sqrt(sqr(pos[1]) + sqr(pos[2]));
-    double C = (qp_PI / 2 - asin(LEG_OFFSET_Y / l1)) * qp_RAD_TO_DEG;
-    double Cdif = 90 - C;
+    double knee_x, knee_y;
+    float angle_x, angle_y, angle_z;
+    double trans_pos_x, trans_pos_y, trans_pos_z;
+    double l1 = sqrt(sqr(y) + sqr(z));
+    double C = (qp_PI / 2.0 - std::asin(LEG_OFFSET_Y / l1)) * qp_RAD_TO_DEG;
+    double Cdif = 90.0 - C;
     if (leg >= 2)
 	Cdif *= -1;
     double l3 = l1 * sin(C * qp_DEG_TO_RAD);
-    trans_pos[0] = pos[0];
-    trans_pos[1] = (l3 / sqrt(sqr(pos[1]) + sqr(pos[2]))) * pos[1];
-    trans_pos[2] = (l3 / sqrt(sqr(pos[1]) + sqr(pos[2]))) * pos[2];
-    double test = sqrt(sqr(trans_pos[1]) + sqr(trans_pos[2]));
-    trans_pos[1] = trans_pos[1] * cos(Cdif * qp_DEG_TO_RAD) - trans_pos[2] * sin(Cdif * qp_DEG_TO_RAD);
-    trans_pos[2] = trans_pos[1] * sin(Cdif * qp_DEG_TO_RAD) + trans_pos[2] * cos(Cdif * qp_DEG_TO_RAD);
-    double test1 = sqrt(sqr(trans_pos[1]) + sqr(trans_pos[2]));
-    trans_pos[1] = (l3 / sqrt(sqr(trans_pos[1]) + sqr(trans_pos[2]))) * trans_pos[1];
-    trans_pos[2] = (l3 / sqrt(sqr(trans_pos[1]) + sqr(trans_pos[2]))) * trans_pos[2];
-    //trans_pos[1] = -trans_pos[1]; // the trans_pos[1] also needs to be flipt, since trans_pos[2] is already flipped
-    double test2 = sqrt(sqr(trans_pos[1]) + sqr(trans_pos[2]));
-    // extending the length of the [0][2] vector to the length of the [0][1][2] vector
-    double q1 = sqrt((sqr(trans_pos[0]) + sqr(trans_pos[1]) + sqr(trans_pos[2])) / (sqr(trans_pos[0]) + sqr(trans_pos[2]) + EPSILON));
-    trans_pos[0] *= q1;
-    trans_pos[2] *= q1;
+    trans_pos_x = x;
+    trans_pos_y = (l3 / sqrt(sqr(y) + sqr(z))) * y;
+    trans_pos_z = (l3 / sqrt(sqr(y) + sqr(z))) * z;
+    double test = sqrt(sqr(trans_pos_y) + sqr(trans_pos_z));
+    trans_pos_y = trans_pos_y * cos(Cdif * qp_DEG_TO_RAD) - trans_pos_z * sin(Cdif * qp_DEG_TO_RAD);
+    trans_pos_z = trans_pos_y * sin(Cdif * qp_DEG_TO_RAD) + trans_pos_z * cos(Cdif * qp_DEG_TO_RAD);
+    double test1 = sqrt(sqr(trans_pos_y) + sqr(trans_pos_z));
+    trans_pos_y = (l3 / sqrt(sqr(trans_pos_y) + sqr(trans_pos_z))) * trans_pos_y;
+    trans_pos_z = (l3 / sqrt(sqr(trans_pos_y) + sqr(trans_pos_z))) * trans_pos_z;
+    //trans_pos_y = -trans_pos_y; // the trans_pos_y also needs to be flipt, since trans_pos_z is already flipped
+    double test2 = sqrt(sqr(trans_pos_y) + sqr(trans_pos_z));
+    // extending the length of the xz vector to the length of the xyz vector
+    double q1 = sqrt((sqr(trans_pos_x) + sqr(trans_pos_y) + sqr(trans_pos_z)) / (sqr(trans_pos_x) + sqr(trans_pos_z) + EPSILON));
+    trans_pos_x *= q1;
+    trans_pos_z *= q1;
 
     // Calculation of the intersection points of the circles, created by the radii of the legs (Source: http://paulbourke.net/geometry/circlesphere/tvoght.c)
-    double x0 = 0, y0 = 0, x1 = trans_pos[0], y1 = trans_pos[2]; // mid points of the two circles
+    double x0 = 0, y0 = 0, x1 = trans_pos_x, y1 = trans_pos_z; // mid points of the two circles
     double r0 = UPLEGLGTH, r1 = LOWLEGLGTH;
     double dx = x0 - x1;
     double dy = y0 - y1;
@@ -336,19 +355,20 @@ vector<float> get_IK(vector<float> pos, int leg)
     // Determine the absolute intersection points. Just using one of the two points.
     double fx = -(x2 + rx);
     double fy = -(y2 + ry);
-    knee[0] = fx;
-    knee[1] = fy;
+    knee_x = fx;
+    knee_y = fy;
     // calculating the angles between the computed vectors and the vectors representing the minimal servo position
-    angles = {
-	float(angle_vec2_vec2({ (leg >= 2 ? 1.0 : -1.0), 0 }, { trans_pos[1], trans_pos[2] })), // 0
-	float(angle_vec2_vec2({1.0, 1.0}, knee)), // 1
-	float(angle_vec2_vec2({ knee[0] - trans_pos[0], knee[1] - trans_pos[2] }, { 1,-1 })) // 2
-    };
+    angle_x = float(angle_vec2_vec2({ (leg >= 2 ? 1.0 : -1.0), 0 }, { trans_pos_y, trans_pos_z })); // 0
+    angle_y = float(angle_vec2_vec2({1.0, 1.0}, {knee_x, knee_y})); // 1
+    angle_z = float(angle_vec2_vec2({ knee_x - trans_pos_x, knee_y - trans_pos_z }, { 1,-1 })); // 2
+
     // in case one of the angles is not a number (meaning there isnt a solution) then it returns the previous angles 
-    if (angles[0] + angles[1] + angles[2] != angles[0] + angles[1] + angles[2])
-	return previous_angles[leg];
-    previous_angles[leg] = angles;
-    return angles;
+    if (angle_x + angle_y + angle_z != angle_x + angle_y + angle_z)
+	return {previous_angles[leg][0], previous_angles[leg][1], previous_angles[leg][2]};
+    previous_angles[leg][0] = angle_x;
+    previous_angles[leg][1] = angle_y;
+    previous_angles[leg][2] = angle_z;
+    return {angle_x, angle_y, angle_z};
 }
 
 // servo_mask() Is used to correct for slightly incorrect leg assembly (wrong leg segment orientation) AND to take into account,
@@ -393,7 +413,7 @@ void update_servos()
     // Subtracting the "actual home leg position" from the global leg positions,
     // in order to move the coordinates from the global to the local coordinate system  
     vector<vector<float>> new_leg_pos = { {0,0,0},{0,0,0},{0,0,0},{0,0,0} };
-    vector<float> new_servo_pos;
+    vec3<float> new_servo_pos;
     for(int i = 0; i < 4; i++){
 	for(int j = 0; j < 2; j++)
 	    new_leg_pos[i][j] = glob_leg_pos[i][j] - actual_home_leg_pos[i][j];
@@ -403,14 +423,14 @@ void update_servos()
   
     // Iterating over all servos and moving them to the new position
     for(int leg = 0; leg < NUMBER_OF_LEGS; leg++){
-	new_servo_pos = get_IK(new_leg_pos[leg], leg);
-	for(int servo = 0; servo < SERVOS_PER_LEG; servo++){
+	new_servo_pos = get_IK(new_leg_pos[leg][0], new_leg_pos[leg][1], new_leg_pos[leg][2], leg);
+	for(int servo = 0; servo < SERVOS_PER_LEG; ++servo){
 	    // setting the servo positions
-	    pca9685.setPWM(SERVO_CONNECTIONS[leg * SERVOS_PER_LEG + servo], 0, map(servo_mask(new_servo_pos[servo], leg * SERVOS_PER_LEG + servo), 0, 180, SERVOMIN, SERVOMAX));
+	    pca9685.setPWM(SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)], 0, map(servo_mask(new_servo_pos[servo], IDX_2D(servo, leg, SERVOS_PER_LEG)), 0, 180, SERVOMIN, SERVOMAX));
 	    // printing the servo angles in the serial monitor
-	    Serial.print(SERVO_CONNECTIONS[leg * SERVOS_PER_LEG + servo]);
+	    Serial.print(SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)]);
 	    Serial.print(", ");
-	    Serial.print(servo_mask(new_servo_pos[servo], SERVO_CONNECTIONS[leg * SERVOS_PER_LEG + servo]));
+	    Serial.print(servo_mask(new_servo_pos[servo], SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)]));
 	    Serial.print(" | ");
 	}
 	Serial.print("  ");
@@ -438,13 +458,9 @@ void adapt_motion_params(vector<float> new_dir){
     }
 }
 
-vector<float> get_move_commandf(){
-    vector<float> new_dir = {(float)x_direction, (float)y_direction, (float)z_direction, (float)rotation_direction};
+vec4<float> get_move_commandf(){
+    vec4<float> new_dir = {(float)x_direction, (float)y_direction, (float)z_direction, (float)rotation_direction};
     return(new_dir);
-}
-
-float get_angle(float x, float y) {
-    return atan2(y, x) * float(qp_RAD_TO_DEG) + ((y <= 0) * 360);
 }
 
 vector<float> vec_float_div(vector<float> a, float b) {
@@ -461,16 +477,25 @@ vector<float> vec_float_mul(vector<float> a, float b) {
     return(pro);
 }
 
-void get_rota_trans(vector<vector<float>>& next_step, vector<float>& next_dir) {
+void get_rota_trans(vec4<float>* next_step, vec4<float>& next_dir) {
     float r;
-    for (int i = 0; i < next_step.size(); i++) {
+    for (int i = 0; i < 2; ++i) {
 	r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
 	next_step[i][0] = cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] - sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
 	next_step[i][1] = sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] + cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
     }
 }
 
-void get_step(vector<vector<float>>& step_pair, vector<vector<float>>& push_pair, vector<float>& next_dir) {
+void get_rota_trans(vec3<float>* next_step, vec4<float>& next_dir) {
+    float r;
+    for (int i = 0; i < 2; ++i) {
+	r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
+	next_step[i][0] = cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] - sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
+	next_step[i][1] = sin(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][0] + cos(next_dir[3] * float(qp_DEG_TO_RAD)) * next_step[i][1];
+    }
+}
+
+void get_step(vec4<float>* step_pair, vec4<float>* push_pair, vec4<float>& next_dir) {
     vector<vector<float>> next_step = { {0,0,0,0}, {0,0,0,0} };
     if ((signbit(prev_dir[0][0]) + signbit(next_dir[0])) == 1 ||
 	(signbit(prev_dir[0][1]) + signbit(next_dir[1])) == 1 ||
@@ -493,7 +518,7 @@ void get_step(vector<vector<float>>& step_pair, vector<vector<float>>& push_pair
     }
     for (int i = 0; i < 2; i++)
 	for (int j = 0; j < 3; j++)
-	    step_pair[i][j] = home_leg_pos[step_pair[i][3]][j] + next_dir[j] / 2;
+	    step_pair[i][j] = home_leg_pos[int(step_pair[i][3])][j] + next_dir[j] / 2;
     get_rota_trans(step_pair, next_dir);
 }
 
@@ -509,33 +534,47 @@ vector<float> bez3_at(float* p0, float* p1, float* p2, float at, int dim) {
     return(bez_result_at);
 }
 
-vector<float> incl_z(vector<float>& next_leg_pos, vector<float>& prev_leg_pos, float z_peak, int i) {
+vec3<float> bez3_3d_at(float* p0, float* p1, float* p2, float at) {
+    float p01, p12, p01_12;
+    vec3<float> bez_result_at;
+    for (int j = 0; j < 3; j++) {
+	p01 = (p0[j] + (p1[j] - p0[j]) * at);
+	p12 = (p1[j] + (p2[j] - p1[j]) * at);
+	p01_12 = (p01 + (p12 - p01) * at);
+	bez_result_at[j] = p01_12;
+    }
+    return(bez_result_at);
+}
+
+vec3<float> incl_z(vec4<float>& next_leg_pos, vec4<float>& prev_leg_pos, float z_peak, int i) {
     float p0[3] = { prev_leg_pos[0], prev_leg_pos[1], prev_leg_pos[2] };
     float p1[3] = { (next_leg_pos[0] + prev_leg_pos[0]) / 2, (next_leg_pos[1] + prev_leg_pos[1]) / 2, ((next_leg_pos[2] + prev_leg_pos[2]) / 2) + ((next_leg_pos[2] + prev_leg_pos[2]) / 2) * float(z_peak) };
     float p2[3] = { next_leg_pos[0], next_leg_pos[1], next_leg_pos[2] };
-    return bez3_at(p0, p1, p2, (i >= 0 ? i / MOTION_RES : 0), 3);
+    return bez3_3d_at(p0, p1, p2, (i >= 0 ? i / MOTION_RES : 0));
 }
 
-void add_globLeg_stepPair(vector<vector<float>>& step_pair, vector<vector<float>>& step_pair_prev_pos, vector<float>& next_dir, int i) {
-    for (int j = 0; j < step_pair.size(); j++)
-	glob_leg_pos[step_pair[j][3]] = incl_z(step_pair[j], step_pair_prev_pos[j], (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0]) + sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1]) + sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2]) + sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3])) >= 4 ? STEP_HEIGHT : 0), i);
+void add_globLeg_stepPair(vec4<float> *step_pair, vec4<float> *step_pair_prev_pos, vec4<float>& next_dir, int i) {
+    for (int j = 0; j < 2; j++)
+	glob_leg_pos[int(step_pair[j][3])] = incl_z(step_pair[j], step_pair_prev_pos[j], (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0]) + sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1]) + sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2]) + sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3])) >= 4 ? STEP_HEIGHT : 0), i);
 }
 
-void add_globLeg_pushPair(vector<vector<float>>& push_pair, vector<vector<float>>& push_pair_prev_pos, vector<float>& next_dir, int i) {
-    vector<float> next_dir_portions = vec_float_div(next_dir, MOTION_RES), next_dir_portions_x_i;
-    for (int j = 0; j < push_pair.size(); j++) {
+void add_globLeg_pushPair(vec4<float> *push_pair, vec4<float> *push_pair_prev_pos, vec4<float> &next_dir, int i)
+{
+    vec4<float> next_dir_portions = next_dir / MOTION_RES;
+    vec4<float> next_dir_portions_x_i;
+    for (int j = 0; j < 2; j++) {
 	// assigning the targeted end position for the pushing legs
 	for(int h = 0; h < 3; h++)
 	    push_pair[j][h] = push_pair_prev_pos[j][h] - next_dir[h];
 	// including the rotational motion
-	glob_leg_pos[push_pair[j][3]] = incl_z(push_pair[j], push_pair_prev_pos[j], (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0]) + sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1]) + sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2]) + sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3])) >= 4 ? PUSH_HEIGHT : 0), i);
-	next_dir_portions_x_i = vec_float_mul(next_dir_portions, -i); // we need a minus, since the pushing pair has to go in the reversed direction of the global direction
+	glob_leg_pos[int(push_pair[j][3])] = incl_z(push_pair[j], push_pair_prev_pos[j], (sqrt(sqr(next_dir[0] + prev_dir[0][0] + prev_dir[1][0]) + sqr(next_dir[1] + prev_dir[0][1] + prev_dir[1][1]) + sqr(next_dir[2] + prev_dir[0][2] + prev_dir[1][2]) + sqr(next_dir[3] + prev_dir[0][3] + prev_dir[1][3])) >= 4 ? PUSH_HEIGHT : 0), i);
+	next_dir_portions_x_i = next_dir_portions * -i; // we need a minus, since the pushing pair has to go in the reversed direction of the global direction
     }
-    vector<vector<float>> next_step{ glob_leg_pos[push_pair[0][3]],glob_leg_pos[push_pair[1][3]] };
+    vec3<float> next_step[2] = { glob_leg_pos[int(push_pair[0][3])], glob_leg_pos[int(push_pair[1][3])] };
     get_rota_trans(next_step, next_dir_portions_x_i);
-    for (int j = 0; j < next_step.size(); j++)
+    for (int j = 0; j < 2; j++)
 	for (int h = 0; h < 2; h++)
-	    glob_leg_pos[push_pair[j][3]][h] = next_step[j][h];
+	    glob_leg_pos[int(push_pair[j][3])][h] = next_step[j][h];
 }
 
 void simple_motion_func() {
@@ -544,17 +583,22 @@ void simple_motion_func() {
     MOTION_RES = new_MOTION_RES;
     for (int i = 0; i < 4; i++)
 	home_leg_pos[i][2] = float(HOME_HEIGHT);
-    vector<float> next_dir = get_move_commandf();
-    vector<vector<float>> step_pair = { {0,0,0,0}, {0,0,0,0} }, push_pair = { {0,0,0,0}, {0,0,0,0} };
-    vector<vector<float>> step_pair_prev_pos, push_pair_prev_pos;
-    step_pair_prev_pos = step_pair;
-    push_pair_prev_pos = step_pair;
+    vec4<float> next_dir = get_move_commandf();
+    
+    vec4<float> step_pair[2] = { {0,0,0,0}, {0,0,0,0} };
+    vec4<float> push_pair[2] = { {0,0,0,0}, {0,0,0,0} };
+    
+    vec4<float> step_pair_prev_pos[2], push_pair_prev_pos[2];
+    step_pair_prev_pos[0] = step_pair[0];
+    step_pair_prev_pos[1] = step_pair[1];
+    push_pair_prev_pos[0] = step_pair[0];
+    push_pair_prev_pos[1] = step_pair[1];
     // assigning the push or step role to the legs and computing the steps
     get_step(step_pair, push_pair, next_dir);
     for (int i = 0; i < 2; i++) {
 	for (int j = 0; j < 3; j++) {
-	    step_pair_prev_pos[i][j] = glob_leg_pos[step_pair[i][3]][j];
-	    push_pair_prev_pos[i][j] = glob_leg_pos[push_pair[i][3]][j];
+	    step_pair_prev_pos[i][j] = glob_leg_pos[int(step_pair[i][3])][j];
+	    push_pair_prev_pos[i][j] = glob_leg_pos[int(push_pair[i][3])][j];
 	}
     }
     // execute motion
@@ -567,7 +611,7 @@ void simple_motion_func() {
 	else if((i - 1) * STEP_TIME_REDUCTION <= MOTION_RES + 1) {
 	    for (int j = 0; j < 2; j++)
 		for (int h = 0; h < 3; h++)
-		    step_pair_prev_pos[j][h] = glob_leg_pos[step_pair[j][3]][h];
+		    step_pair_prev_pos[j][h] = glob_leg_pos[int(step_pair[j][3])][h];
 	    add_globLeg_pushPair(step_pair, step_pair_prev_pos, next_dir, (i - MOTION_RES / STEP_TIME_REDUCTION)/* * float(STEP_TIME_REDUCTION)*/);
 	} else 
 	    add_globLeg_pushPair(step_pair, step_pair_prev_pos, next_dir, (i - MOTION_RES / STEP_TIME_REDUCTION)/* * float(STEP_TIME_REDUCTION)*/);
@@ -686,6 +730,16 @@ enum test_result_enum {
     TR_Problem,
 };
 
+std::string get_cstr_diff(const char* a, const char* b) {
+    std::string result;
+    while(*(++a) && *(++b)) {
+	if(*a != *b) {
+	    result += *b;
+	}
+    }
+    return result;
+}
+
 test_result_enum run_test(std::string(*test)(void), std::string test_result_name) {
 
     // read previous test result:
@@ -716,15 +770,17 @@ test_result_enum run_test(std::string(*test)(void), std::string test_result_name
     // run the test and compare with record
 
     std::string result = test();
-    if(std::strcmp(result.c_str(), record_data) == 0) {
+    std::string diff = get_cstr_diff(record_data, result.c_str());
+    if(diff.size()) {
+	std::cout << "\033[31m" << "FAIL " << test_result_name << "\033[0m" "\n"
+		  << diff << "\n\n";
+	delete[] record_data;
+	return TR_Fail;
+    }
+    else {
 	std::cout << "\033[32m" << "PASS " << test_result_name << "\033[0m" "\n";
 	delete[] record_data;
 	return TR_Success;
-    }
-    else {
-	std::cout << "\033[31m" << "FAIL " << test_result_name << "\033[0m" "\n";
-	delete[] record_data;
-	return TR_Fail;
     }
 }
 
@@ -797,6 +853,13 @@ void record_all_tests() {
     record_test(test_turning, "test_turning.txt");
 }
 
+void record_comparisons() {
+    record_test(test_1, "com_test_1.txt");
+    record_test(test_walking_forward_backward, "com_test_walking_forward_backward.txt");
+    record_test(test_walking_left_right, "com_test_walking_left_right.txt");
+    record_test(test_turning, "com_test_turning.txt");
+}
+
 void run_all_tests() {
     run_test(test_1, "test_1.txt");
     run_test(test_walking_forward_backward, "test_walking_forward_backward.txt");
@@ -807,6 +870,6 @@ void run_all_tests() {
 int main() {
     
     run_all_tests();
-    
+
 }
 #endif // ARDUINO_FREE
