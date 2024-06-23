@@ -161,11 +161,14 @@ constexpr float ACTUAL_QP_SIZEX = 218;
 constexpr float QP_SIZEY = 210;
 constexpr float ACTUAL_QP_SIZEY = 110;
 
+// These are just relevant for visualization
+constexpr float SERVO_0_AXIS_OFFSET = 21.2;
+constexpr float LEG_WIDTH_OFFSET = 7.5;
+
 constexpr float UPLEGLGTH = 130;  // UPLEGLGTH is the length of the upper leg in mm
 constexpr float LOWLEGLGTH = 130; // LOWLEGLGTH is the length of the lower leg in mm
 
 #define LEG_OFFSET_Y 32.4  // This is the Y distance between the hip joint and the leg tip
-#define LOWLEG_CURVATURE 7 // Takes the curvature of the lower leg into account, in degrees
 
 // Center of gravity offset in mm from the midpoint of the quadruped
 #define COG_X_OFFSET -10
@@ -185,6 +188,13 @@ constexpr float LOWLEGLGTH = 130; // LOWLEGLGTH is the length of the lower leg i
 #define MAX_DIR_VEC_LENGTH sqrt(sqr(MAX_X_DIR) + sqr(MAX_Y_DIR))
 #define MAX_X_BODY_OFFSET_RATIO 5 // meaning 1/5
 #define MAX_Y_BODY_OFFSET_RATIO 5 // meaning 1/5
+
+#if VISUALIZE_QUADRUPED
+#include "visualize_quadruped.hpp"
+QP_Viewport qp_viewport{ACTUAL_QP_SIZEX, ACTUAL_QP_SIZEY,     UPLEGLGTH,
+                        LOWLEGLGTH,      SERVO_0_AXIS_OFFSET, LEG_WIDTH_OFFSET};
+bool exit_graphical_environment = false;
+#endif // VISUALIZE_QUADRUPED
 
 // mathematical
 
@@ -320,16 +330,16 @@ vec3<float> get_IK(float x, float y, float z, int leg)
     double trans_pos_x, trans_pos_y, trans_pos_z;
     double l1 = sqrt(sqr(y) + sqr(z));
     double C = (qp_PI / 2.0 - std::asin(LEG_OFFSET_Y / l1)) * qp_RAD_TO_DEG;
-    double Cdif = 90.0 - C;
+    double Cdiff = 90.0 - C;
     if (leg >= 2)
-	Cdif *= -1;
+	Cdiff *= -1;
     double l3 = l1 * sin(C * qp_DEG_TO_RAD);
     trans_pos_x = x;
     trans_pos_y = (l3 / sqrt(sqr(y) + sqr(z))) * y;
     trans_pos_z = (l3 / sqrt(sqr(y) + sqr(z))) * z;
     double test = sqrt(sqr(trans_pos_y) + sqr(trans_pos_z));
-    trans_pos_y = trans_pos_y * cos(Cdif * qp_DEG_TO_RAD) - trans_pos_z * sin(Cdif * qp_DEG_TO_RAD);
-    trans_pos_z = trans_pos_y * sin(Cdif * qp_DEG_TO_RAD) + trans_pos_z * cos(Cdif * qp_DEG_TO_RAD);
+    trans_pos_y = trans_pos_y * cos(Cdiff * qp_DEG_TO_RAD) - trans_pos_z * sin(Cdiff * qp_DEG_TO_RAD);
+    trans_pos_z = trans_pos_y * sin(Cdiff * qp_DEG_TO_RAD) + trans_pos_z * cos(Cdiff * qp_DEG_TO_RAD);
     double test1 = sqrt(sqr(trans_pos_y) + sqr(trans_pos_z));
     trans_pos_y = (l3 / sqrt(sqr(trans_pos_y) + sqr(trans_pos_z))) * trans_pos_y;
     trans_pos_z = (l3 / sqrt(sqr(trans_pos_y) + sqr(trans_pos_z))) * trans_pos_z;
@@ -407,6 +417,37 @@ float servo_mask(float angle, int servo){
 	return(angle - 29);
 }
 
+float default_servo_mask(float angle, int servo){
+    // 0
+    if(servo == 3)
+	return(180.0 - (angle));
+    else if(servo == 4)
+	return(180.0 - (angle));
+    else if(servo == 5)
+	return(180.0 - (angle));
+    // 1
+    else if(servo == 0)
+	return(angle);
+    else if(servo == 1)
+	return(180.0 - (angle));
+    else if(servo == 2)
+	return(180.0 - (angle));
+    // 2
+    else if(servo == 9)
+	return(angle);
+    else if(servo == 10)
+	return(angle);
+    else if(servo == 11)
+	return(angle);
+    // 3 
+    else if(servo == 6)
+	return(180.0 - (angle));
+    else if(servo == 7)
+	return(angle);
+    else if(servo == 8)
+	return(angle);
+}
+
 // moves the servos to whatever is currently in glob_leg_pos
 void update_servos()
 {
@@ -422,10 +463,19 @@ void update_servos()
   
     // Iterating over all servos and moving them to the new position
     vec3<float> new_servo_pos;
+    
+#if VISUALIZE_QUADRUPED
+    vec3<float> vq_leg_servo_angles[4];
+#endif
+    
     for(int leg = 0; leg < NUMBER_OF_LEGS; leg++){
 	new_servo_pos = get_IK(new_leg_pos[leg][0], new_leg_pos[leg][1], new_leg_pos[leg][2], leg);
+	
 	for(int servo = 0; servo < SERVOS_PER_LEG; ++servo){
 	    // setting the servo positions
+#if VISUALIZE_QUADRUPED
+	    vq_leg_servo_angles[leg][servo] = new_servo_pos[servo];
+#endif
 	    pca9685.setPWM(SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)], 0, map(servo_mask(new_servo_pos[servo], IDX_2D(servo, leg, SERVOS_PER_LEG)), 0, 180, SERVOMIN, SERVOMAX));
 	    // printing the servo angles in the serial monitor
 	    Serial.print(SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)]);
@@ -436,6 +486,13 @@ void update_servos()
 	Serial.print("  ");
     }
     Serial.println();
+    
+#if VISUALIZE_QUADRUPED
+    exit_graphical_environment = !qp_viewport.update_viewport(Vector3{vq_leg_servo_angles[0].x, vq_leg_servo_angles[0].y, vq_leg_servo_angles[0].z},
+							      Vector3{vq_leg_servo_angles[1].x, vq_leg_servo_angles[1].y, vq_leg_servo_angles[1].z},
+							      Vector3{vq_leg_servo_angles[2].x, vq_leg_servo_angles[2].y, vq_leg_servo_angles[2].z},
+							      Vector3{vq_leg_servo_angles[3].x, vq_leg_servo_angles[3].y, vq_leg_servo_angles[3].z});
+#endif
 }
 
 // like the map() function, but for float instead of int
@@ -453,6 +510,7 @@ vec4<float> get_move_commandf()
 static void get_rota_trans(vec4<float>* next_step, vec4<float>& next_dir)
 {
     for (int i = 0; i < 2; ++i) {
+	float r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
 	next_step[i].x = cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
 	next_step[i].y = sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
     }
@@ -461,6 +519,7 @@ static void get_rota_trans(vec4<float>* next_step, vec4<float>& next_dir)
 static void get_rota_trans(vec3<float> *next_step, vec4<float> &next_dir)
 {
     for (int i = 0; i < 2; ++i) {
+	float r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
 	next_step[i].x = cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
 	next_step[i].y = sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
     }
@@ -844,9 +903,27 @@ void run_all_tests() {
     run_test(test_turning, "test_turning.txt");
 }
 
-int main() {
-    
-    run_all_tests();
+#if VISUALIZE_QUADRUPED
+void run_graphical_environment() {
 
+
+    new_MOTION_RES = 20;
+    
+    while(!exit_graphical_environment){
+	
+	qp_viewport.get_gamepad_input(&Ps3.data.analog.stick.lx, &Ps3.data.analog.stick.ly, &Ps3.data.analog.stick.rx, &Ps3.data.analog.stick.ry);
+	Ps3.data.analog.stick.ly = -120.0;
+	get_ps3_input();
+	loop();
+    }
+}
+#endif // VISUALIZE_QUADRUPED
+
+int main() {
+
+    // run_all_tests();
+    // record_comparisons();
+    
+    run_graphical_environment();
 }
 #endif // ARDUINO_FREE
