@@ -671,12 +671,12 @@ void tune_servo_positions()
 // reads the ps3 controller input
 void get_ps3_input()
 {
-    x_direction = mapf(Ps3.data.analog.stick.ly, -127, 128, MAX_X_DIR, -MAX_X_DIR);
+    x_direction = mapf(Ps3.data.analog.stick.ly, -128, 127, MAX_X_DIR, -MAX_X_DIR);
     float MAXy = sqrt(sqr(MAX_DIR_VEC_LENGTH) - sqr(x_direction));
     MAXy = MAXy >= MAX_Y_DIR ? MAX_Y_DIR : MAXy;
-    y_direction = mapf(Ps3.data.analog.stick.lx, -127, 128, MAXy, -MAXy);
-    rotation_direction = mapf(Ps3.data.analog.stick.rx, -127, 128, 25, -25);
-    HOME_HEIGHT = mapf(Ps3.data.analog.stick.ry, -127, 128, 140, 210);
+    y_direction = mapf(Ps3.data.analog.stick.lx, -128, 127, MAXy, -MAXy);
+    rotation_direction = mapf(Ps3.data.analog.stick.rx, -128, 127, 25, -25);
+    HOME_HEIGHT = mapf(Ps3.data.analog.stick.ry, -128, 127, 140, 210);
 
     if( Ps3.event.button_up.cross )
 	new_STEP_HEIGHT = -0.2;
