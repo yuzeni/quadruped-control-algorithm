@@ -20,19 +20,9 @@ static Vector3 operator-(Vector3 a, Vector3 b)
   return Vector3{a.x - b.x, a.y - b.y, a.z - b.z};
 }
 
-static Vector3 operator-(Vector3 a, float s)
-{
-  return Vector3{a.x - s, a.y - s, a.z - s};
-}
-
 static Vector3 operator*(Vector3 a, float s)
 {
   return Vector3{a.x * s, a.y * s, a.z * s};
-}
-
-static Vector3 operator*(Vector3 a, Vector3 b)
-{
-  return Vector3{a.x * b.x, a.y * b.y, a.z * b.z};
 }
 
 Vector3 normalize(const Vector3 &v)
@@ -41,12 +31,58 @@ Vector3 normalize(const Vector3 &v)
     return { v.x / length, v.y / length, v.z / length };
 }
 
-struct Line {
-    Vector3 a;
-    Vector3 b;
-};
+QP_Viewport::QP_Viewport(float qp_size_x, float qp_size_y, float upper_leg_length,
+	    float lower_leg_length, float servo_0_axis_offset, float leg_width_offset)
+{
+    InitWindow(screenWidth, screenHeight, "raylib [core] example - 3d camera first person");
 
+    // Define the camera to look into our 3d world (position, target, up vector)
+    camera.position = Vector3{ 0.0f, 2.0f, 4.0f };    // Camera position
+    camera.target = Vector3{ 0.0f, 2.0f, 0.0f };      // Camera looking at point
+    camera.up = Vector3{ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
+    camera.fovy = 60.0f;                                // Camera field-of-view Y
+    camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
 
+    cameraMode = CAMERA_THIRD_PERSON;
+
+    DisableCursor();                    // Limit cursor to relative movement inside the window
+    SetTargetFPS(60);                   // Set our game to run at 60 frames-per-second
+
+    qp_size_x /= 100;
+    qp_size_y /= 100;
+    upper_leg_length /= 100;
+    lower_leg_length /= 100;
+    servo_0_axis_offset /= 100;
+    leg_width_offset /= 100;
+
+    leg0.joint_a_offset = {0, 0, servo_0_axis_offset};
+    leg0.joint_b_offset = {0, 0, leg_width_offset};
+    leg0.base_pos = {qp_size_x / 2, 2, qp_size_y / 2};
+    leg0.lower_leg_length = lower_leg_length;
+    leg0.upper_leg_length = upper_leg_length;
+    // leg0.on_mirrored_side = true;
+
+    leg1.joint_a_offset = {0, 0, -servo_0_axis_offset};
+    leg1.joint_b_offset = {0, 0, -leg_width_offset};
+    leg1.base_pos = {qp_size_x / 2, 2, -qp_size_y / 2};
+    leg1.lower_leg_length = lower_leg_length;
+    leg1.upper_leg_length = upper_leg_length;
+    // leg1.on_mirrored_side = true;
+
+    leg2.joint_a_offset = {0, 0, servo_0_axis_offset};
+    leg2.joint_b_offset = {0, 0, leg_width_offset};
+    leg2.base_pos = {-qp_size_x / 2, 2, qp_size_y / 2};
+    leg2.lower_leg_length = lower_leg_length;
+    leg2.upper_leg_length = upper_leg_length;
+    // leg2.on_mirrored_side = true;
+
+    leg3.joint_a_offset = {0, 0, -servo_0_axis_offset};
+    leg3.joint_b_offset = {0, 0, -leg_width_offset};
+    leg3.base_pos = {-qp_size_x / 2, 2, -qp_size_y / 2};
+    leg3.lower_leg_length = lower_leg_length;
+    leg3.upper_leg_length = upper_leg_length;
+    // leg3.on_mirrored_side = true;
+} 
 
 void rotation_matrix(Vector3 a, Vector3 offset, float angle, float R[3][3])
 {
@@ -155,6 +191,7 @@ bool QP_Viewport::update_viewport(Vector3 angles_leg0, Vector3 angles_leg1, Vect
     }
     
     UpdateCamera(&camera, cameraMode);
+    
 
     BeginDrawing();
 
@@ -166,20 +203,20 @@ bool QP_Viewport::update_viewport(Vector3 angles_leg0, Vector3 angles_leg1, Vect
 
     // static float angle = 0;
     // angle += 0.1;
-    // leg0.draw({90,135+angle,45+angle});
-    // leg1.draw({90,135+angle,45+angle});
-    // leg2.draw({90,135+angle,45+angle});
-    // leg3.draw({90,135+angle,45+angle});
+    // leg0.draw({90+angle,135+angle,45+angle});
+    // leg1.draw({90+angle,135+angle,45+angle});
+    // leg2.draw({90+angle,135+angle,45+angle});
+    // leg3.draw({90+angle,135+angle,45+angle});
 
     // leg0.draw({0,0,0});
     // leg1.draw({0,0,0});
     // leg2.draw({0,0,0});
     // leg3.draw({0,0,0});
 
-    leg0.draw(angles_leg0);
-    leg1.draw(angles_leg1);
-    leg2.draw(angles_leg2);
-    leg3.draw(angles_leg3);
+    leg0.draw(angles_leg2);
+    leg1.draw(angles_leg0);
+    leg2.draw(angles_leg3);
+    leg3.draw(angles_leg1);
     
     EndMode3D();
 
@@ -188,12 +225,23 @@ bool QP_Viewport::update_viewport(Vector3 angles_leg0, Vector3 angles_leg1, Vect
     return true;
 }
 
-void QP_Viewport::get_gamepad_input(double* stick_lx, double* stick_ly, double* stick_rx, double* stick_ry) {
-    if (IsGamepadAvailable(0))
-    {
-	*stick_lx = GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_X) * 100.0;
-	*stick_ly = GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_Y) * 100.0;
-	*stick_rx = GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_X) * 100.0;
-	*stick_ry = GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_Y) * 100.0;
+void QP_Viewport::get_Ps3_input(double* stick_lx, double* stick_ly, double* stick_rx, double* stick_ry) {
+    if(IsKeyDown(KEY_I) && *stick_ly > -128)
+	*stick_ly -= 1;
+    else if(IsKeyDown(KEY_K) && *stick_ly < 127)
+	*stick_ly += 1;
+    else if(IsKeyDown(KEY_J) && *stick_lx < 127)
+	*stick_lx += 1;
+    else if(IsKeyDown(KEY_L) && *stick_lx > -128)
+	*stick_lx -= 1;
+    else if(IsKeyDown(KEY_U) && *stick_rx < 127)
+	*stick_rx += 1;
+    else if(IsKeyDown(KEY_O) && *stick_rx > -128)
+	*stick_rx -= 1;
+    else if(IsKeyDown(KEY_SPACE)) {
+	*stick_lx = 0;
+	*stick_ly = 0;
+	*stick_rx = 0;
+	*stick_ry = 0;
     }
 };

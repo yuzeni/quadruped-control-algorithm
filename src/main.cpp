@@ -58,7 +58,6 @@
 */
 
 #include <cstring>
-#include <vector>
 #include <cstdint>
 #include <cmath>
 
@@ -156,10 +155,12 @@ const int SERVO_CONNECTIONS[12] = {11, 10, 9, 15, 14, 13, 4, 5, 6, 0, 1, 2};
 // between the left and right legs. Increasing X SIZE will increase the distance between the front and rear legs.
 // ACTUAL_QP_SIZE is needed for the computation, and should represent the exact distances
 // between the hip joints (Y) and the pivots of the upper legs (X)
-constexpr float QP_SIZEX = 210;
+constexpr float QP_SIZEX = 220;
 constexpr float ACTUAL_QP_SIZEX = 218;
-constexpr float QP_SIZEY = 210;
+constexpr float QP_SIZEY_EVIL_BUG_FIX = 200;
 constexpr float ACTUAL_QP_SIZEY = 110;
+constexpr float QP_SIZEY = 200; //ACTUAL_QP_SIZEY * 3 - QP_SIZEY_EVIL_BUG_FIX; // THIS IS TERRIBLY WRONG
+
 
 // These are just relevant for visualization
 constexpr float SERVO_0_AXIS_OFFSET = 21.2;
@@ -171,7 +172,7 @@ constexpr float LOWLEGLGTH = 130; // LOWLEGLGTH is the length of the lower leg i
 #define LEG_OFFSET_Y 32.4  // This is the Y distance between the hip joint and the leg tip
 
 // Center of gravity offset in mm from the midpoint of the quadruped
-#define COG_X_OFFSET -10
+#define COG_X_OFFSET 0
 #define COG_Y_OFFSET 0
 
 // The MIN / MAX variables are required, if the algorithm should adaptively change the parameters depending on speed etc.
@@ -368,7 +369,7 @@ vec3<float> get_IK(float x, float y, float z, int leg)
     knee_x = fx;
     knee_y = fy;
     // calculating the angles between the computed vectors and the vectors representing the minimal servo position
-    angle_x = float(angle_vec2_vec2((leg >= 2 ? 1.0 : -1.0), 0, trans_pos_y, trans_pos_z)); // 0
+    angle_x = float(angle_vec2_vec2(1.0, 0, trans_pos_y, trans_pos_z)); // 0 // (leg >= 2 ? 1.0 : -1.0)
     angle_y = float(angle_vec2_vec2(1.0, 1.0, knee_x, knee_y)); // 1
     angle_z = float(angle_vec2_vec2(knee_x - trans_pos_x, knee_y - trans_pos_z, 1,-1)); // 2
 
@@ -387,65 +388,49 @@ vec3<float> get_IK(float x, float y, float z, int leg)
 // You will need to change them to 0 and then after the assembly of the robot, add or subtract something in order to adjust the physical leg orientation to match the software model !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // Use the tune_servo_positions() function for the assembly in order to get the orientation of them right. This function can be found close to the bottom.
 float servo_mask(float angle, int servo){
-    // 0
-    if(servo == 3)
-	return(180.0 - (angle - 22));
-    else if(servo == 4)
-	return(180.0 - (angle - 38));
-    else if(servo == 5)
-	return(180.0 - (angle - 29.5));
-    // 1
-    else if(servo == 0)
-	return(angle - 13);
-    else if(servo == 1)
-	return(180.0 - (angle - 32));
-    else if(servo == 2)
-	return(180.0 - (angle - 31));
-    // 2
-    else if(servo == 9)
-	return(angle - 13);
-    else if(servo == 10)
-	return(angle - 38);
-    else if(servo == 11)
-	return(angle - 28);
-    // 3 
-    else if(servo == 6)
-	return(180.0 - (angle - 11));
-    else if(servo == 7)
-	return(angle - 36);
-    else if(servo == 8)
-	return(angle - 29);
+
+    switch(servo){
+	// 0
+    case 3: return((angle + 22));
+    case 4: return(180.0 - (angle - 38));
+    case 5: return(180.0 - (angle - 29.5));
+	// 1
+    case 0: return(180.0 - (angle + 13));
+    case 1: return(180.0 - (angle - 32));
+    case 2: return(180.0 - (angle - 31));
+	// 2
+    case 9: return(angle - 13);
+    case 10: return(angle - 38);
+    case 11: return(angle - 28);
+	// 3
+    case 6: return(180.0 - (angle - 11));
+    case 7: return(angle - 36);
+    case 8: return(angle - 29);
+    }
+    return 0;
 }
 
 float default_servo_mask(float angle, int servo){
-    // 0
-    if(servo == 3)
-	return(180.0 - (angle));
-    else if(servo == 4)
-	return(180.0 - (angle));
-    else if(servo == 5)
-	return(180.0 - (angle));
-    // 1
-    else if(servo == 0)
-	return(angle);
-    else if(servo == 1)
-	return(180.0 - (angle));
-    else if(servo == 2)
-	return(180.0 - (angle));
-    // 2
-    else if(servo == 9)
-	return(angle);
-    else if(servo == 10)
-	return(angle);
-    else if(servo == 11)
-	return(angle);
-    // 3 
-    else if(servo == 6)
-	return(180.0 - (angle));
-    else if(servo == 7)
-	return(angle);
-    else if(servo == 8)
-	return(angle);
+
+    switch(servo){
+	// 0
+    case 3: return(180.0 - angle);
+    case 4: return(180.0 - angle);
+    case 5: return(180.0 - angle);
+	// 1
+    case 0: return(angle);
+    case 1: return(180.0 - angle);
+    case 2: return(180.0 - angle);
+	// 2
+    case 9: return(angle);
+    case 10: return(angle);
+    case 11: return(angle);
+	// 3
+    case 6: return(180.0 - angle);
+    case 7: return(angle);
+    case 8: return(angle);
+    }
+    return 0;
 }
 
 // moves the servos to whatever is currently in glob_leg_pos
@@ -458,7 +443,6 @@ void update_servos()
 	for(int j = 0; j < 2; j++)
 	    new_leg_pos[i][j] = glob_leg_pos[i][j] - actual_home_leg_pos[i][j];
 	new_leg_pos[i][2] = glob_leg_pos[i][2];
-	new_leg_pos[i][0] *= -1;
     }
   
     // Iterating over all servos and moving them to the new position
@@ -466,6 +450,7 @@ void update_servos()
     
 #if VISUALIZE_QUADRUPED
     vec3<float> vq_leg_servo_angles[4];
+    qp_viewport.get_Ps3_input(&Ps3.data.analog.stick.lx, &Ps3.data.analog.stick.ly, &Ps3.data.analog.stick.rx, &Ps3.data.analog.stick.ry);
 #endif
     
     for(int leg = 0; leg < NUMBER_OF_LEGS; leg++){
@@ -476,7 +461,9 @@ void update_servos()
 #if VISUALIZE_QUADRUPED
 	    vq_leg_servo_angles[leg][servo] = new_servo_pos[servo];
 #endif
-	    pca9685.setPWM(SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)], 0, map(servo_mask(new_servo_pos[servo], IDX_2D(servo, leg, SERVOS_PER_LEG)), 0, 180, SERVOMIN, SERVOMAX));
+	    pca9685.setPWM(SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)],
+			   0,
+			   map(servo_mask(new_servo_pos[servo], IDX_2D(servo, leg, SERVOS_PER_LEG)), 0, 180, SERVOMIN, SERVOMAX));
 	    // printing the servo angles in the serial monitor
 	    Serial.print(SERVO_CONNECTIONS[IDX_2D(servo, leg, SERVOS_PER_LEG)]);
 	    Serial.print(", ");
@@ -488,10 +475,11 @@ void update_servos()
     Serial.println();
     
 #if VISUALIZE_QUADRUPED
-    exit_graphical_environment = !qp_viewport.update_viewport(Vector3{vq_leg_servo_angles[0].x, vq_leg_servo_angles[0].y, vq_leg_servo_angles[0].z},
-							      Vector3{vq_leg_servo_angles[1].x, vq_leg_servo_angles[1].y, vq_leg_servo_angles[1].z},
-							      Vector3{vq_leg_servo_angles[2].x, vq_leg_servo_angles[2].y, vq_leg_servo_angles[2].z},
-							      Vector3{vq_leg_servo_angles[3].x, vq_leg_servo_angles[3].y, vq_leg_servo_angles[3].z});
+    exit_graphical_environment =
+	!qp_viewport.update_viewport(Vector3{vq_leg_servo_angles[0].x, vq_leg_servo_angles[0].y, vq_leg_servo_angles[0].z},
+				     Vector3{vq_leg_servo_angles[1].x, vq_leg_servo_angles[1].y, vq_leg_servo_angles[1].z},
+				     Vector3{vq_leg_servo_angles[2].x, vq_leg_servo_angles[2].y, vq_leg_servo_angles[2].z},
+				     Vector3{vq_leg_servo_angles[3].x, vq_leg_servo_angles[3].y, vq_leg_servo_angles[3].z});
 #endif
 }
 
@@ -507,21 +495,19 @@ vec4<float> get_move_commandf()
     return(new_dir);
 }
 
-static void get_rota_trans(vec4<float>* next_step, vec4<float>& next_dir)
+static void get_rota_trans(vec4<float>* next_step, float angle)
 {
     for (int i = 0; i < 2; ++i) {
-	float r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
-	next_step[i].x = cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
-	next_step[i].y = sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
+	next_step[i].x = cos(angle * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(angle * float(qp_DEG_TO_RAD)) * next_step[i].y;
+	next_step[i].y = sin(angle * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(angle * float(qp_DEG_TO_RAD)) * next_step[i].y;
     }
 }
 
-static void get_rota_trans(vec3<float> *next_step, vec4<float> &next_dir)
+static void get_rota_trans(vec3<float> *next_step, float angle)
 {
     for (int i = 0; i < 2; ++i) {
-	float r = sqrt(sqr(next_step[i][0]) + sqr(next_step[i][1]));
-	next_step[i].x = cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
-	next_step[i].y = sin(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(next_dir.a * float(qp_DEG_TO_RAD)) * next_step[i].y;
+	next_step[i].x = cos(angle * float(qp_DEG_TO_RAD)) * next_step[i].x - sin(angle * float(qp_DEG_TO_RAD)) * next_step[i].y;
+	next_step[i].y = sin(angle * float(qp_DEG_TO_RAD)) * next_step[i].x + cos(angle * float(qp_DEG_TO_RAD)) * next_step[i].y;
     }
 }
 
@@ -549,7 +535,7 @@ static void get_step(vec4<float> *step_pair, vec4<float> *push_pair, vec4<float>
     for (int i = 0; i < 2; i++)
 	for (int j = 0; j < 3; j++)
 	    step_pair[i][j] = home_leg_pos[int(step_pair[i][3])][j] + next_dir[j] / 2;
-    get_rota_trans(step_pair, next_dir);
+    get_rota_trans(step_pair, next_dir.a);
 }
 
 vec3<float> bez3_3d_at(vec3<float> &p0, vec3<float> &p1, vec3<float> &p2, float at)
@@ -604,7 +590,7 @@ void add_globLeg_pushPair(vec4<float> *push_pair, vec4<float> *push_pair_prev_po
 	next_dir_portions_x_i = next_dir_portions * -i; // we need a minus, since the pushing pair has to go in the reversed direction of the global direction
     }
     vec3<float> next_step[2] = { glob_leg_pos[int(push_pair[0][3])], glob_leg_pos[int(push_pair[1][3])] };
-    get_rota_trans(next_step, next_dir_portions_x_i);
+    get_rota_trans(next_step, next_dir_portions_x_i.a);
     for (int j = 0; j < 2; j++)
 	for (int h = 0; h < 2; h++)
 	    glob_leg_pos[int(push_pair[j][3])][h] = next_step[j][h];
@@ -687,7 +673,7 @@ void tune_servo_positions()
 // reads the ps3 controller input
 void get_ps3_input()
 {
-    x_direction = mapf(Ps3.data.analog.stick.ly, -127, 128, -MAX_X_DIR, MAX_X_DIR);
+    x_direction = mapf(Ps3.data.analog.stick.ly, -127, 128, MAX_X_DIR, -MAX_X_DIR);
     float MAXy = sqrt(sqr(MAX_DIR_VEC_LENGTH) - sqr(x_direction));
     MAXy = MAXy >= MAX_Y_DIR ? MAX_Y_DIR : MAXy;
     y_direction = mapf(Ps3.data.analog.stick.lx, -127, 128, MAXy, -MAXy);
@@ -730,7 +716,7 @@ void setup(){
 
 void loop()
 {
-    //tune_servo_positions();
+    // tune_servo_positions();
     simple_motion_func();
 }
 
@@ -903,27 +889,22 @@ void run_all_tests() {
     run_test(test_turning, "test_turning.txt");
 }
 
-#if VISUALIZE_QUADRUPED
-void run_graphical_environment() {
 
-
-    new_MOTION_RES = 20;
-    
-    while(!exit_graphical_environment){
-	
-	qp_viewport.get_gamepad_input(&Ps3.data.analog.stick.lx, &Ps3.data.analog.stick.ly, &Ps3.data.analog.stick.rx, &Ps3.data.analog.stick.ry);
-	Ps3.data.analog.stick.ly = -120.0;
-	get_ps3_input();
-	loop();
-    }
-}
-#endif // VISUALIZE_QUADRUPED
 
 int main() {
 
     // run_all_tests();
     // record_comparisons();
-    
-    run_graphical_environment();
+
+#if VISUALIZE_QUADRUPED
+	new_MOTION_RES = 50;
+	
+	while(!exit_graphical_environment){
+	    // Ps3.data.analog.stick.lx = -128;
+	    get_ps3_input();
+	    loop();
+	}
+#endif // VISUALIZE_QUADRUPED
+
 }
 #endif // ARDUINO_FREE
