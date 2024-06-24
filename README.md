@@ -25,6 +25,7 @@ Use any c++ compiler to compile `main.cpp` with the compilation define `ARDUINO_
 You might add these defines like this in the build command:
 - MSVC: `/D ARDUINO_FREE=1`
 - Clang\GCC: `-DARDUINO_FREE=1`
+
 Use the additional compiler flag `VISUALIZE_QUADRUPED 1` for creating a window showing a 3d representation of the leg movements.
 This mode relies on [Raylib](https://github.com/raysan5/raylib).\
 When building on windows with Visual Studio, just execute the `build.bat` script from the Microsoft Visual Studio "x64 Native Tools Command Prompt" or from any command prompt with the vcvars64.bat environment.
