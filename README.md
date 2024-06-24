@@ -6,7 +6,7 @@
 This is a revised and imporved upon version of the algorithm I originally wrote for my quadruped project.
 
 As of now there is still a lot to be done. But this version is already a big step up from the previous one I included in the GrabCad files.\
-The major improvements are:\
+The major improvements are:
 - added testing
 - visual debugger
 - turning is working again
