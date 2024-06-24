@@ -156,11 +156,9 @@ const int SERVO_CONNECTIONS[12] = {11, 10, 9, 15, 14, 13, 4, 5, 6, 0, 1, 2};
 // ACTUAL_QP_SIZE is needed for the computation, and should represent the exact distances
 // between the hip joints (Y) and the pivots of the upper legs (X)
 constexpr float QP_SIZEX = 220;
+constexpr float QP_SIZEY = 200;
 constexpr float ACTUAL_QP_SIZEX = 218;
-constexpr float QP_SIZEY_EVIL_BUG_FIX = 200;
 constexpr float ACTUAL_QP_SIZEY = 110;
-constexpr float QP_SIZEY = 200; //ACTUAL_QP_SIZEY * 3 - QP_SIZEY_EVIL_BUG_FIX; // THIS IS TERRIBLY WRONG
-
 
 // These are just relevant for visualization
 constexpr float SERVO_0_AXIS_OFFSET = 21.2;
@@ -414,11 +412,11 @@ float default_servo_mask(float angle, int servo){
 
     switch(servo){
 	// 0
-    case 3: return(180.0 - angle);
+    case 3: return(angle);
     case 4: return(180.0 - angle);
     case 5: return(180.0 - angle);
 	// 1
-    case 0: return(angle);
+    case 0: return(180 - angle);
     case 1: return(180.0 - angle);
     case 2: return(180.0 - angle);
 	// 2
@@ -900,7 +898,6 @@ int main() {
 	new_MOTION_RES = 50;
 	
 	while(!exit_graphical_environment){
-	    // Ps3.data.analog.stick.lx = -128;
 	    get_ps3_input();
 	    loop();
 	}
