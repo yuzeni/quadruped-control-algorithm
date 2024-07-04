@@ -1,6 +1,6 @@
 ## Quadruped control algorithm
 <div align="center">
-<img src="https://github.com/yuzeni/quadruped-control-algorithm/blob/main/misc/quadruped.jpg" alt="quadruped" width="500"/>
+<img src="https://github.com/yuzeni/quadruped-control-algorithm/blob/main/misc/quadruped.jpg" alt="quadruped" width="650"/>
 </div>
 
 This is a revised and imporved upon version of the algorithm I originally wrote for my quadruped project.
