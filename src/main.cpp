@@ -895,7 +895,7 @@ int main() {
     // record_comparisons();
 
 #if VISUALIZE_QUADRUPED
-	new_MOTION_RES = 50;
+	new_MOTION_RES = 20;
 	
 	while(!exit_graphical_environment){
 	    get_ps3_input();
